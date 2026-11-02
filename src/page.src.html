@@ -1,0 +1,997 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Regularization Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Interactive lab for Week 07: ridge and lasso, the geometry of l1 and l2 penalties, implicit regularization, cross validation and the Bayesian view of regularization.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+<script>var t="reading";try{t=localStorage.getItem("w05-theme")||t;}catch(e){}if(t!=="auto")document.documentElement.setAttribute("data-theme",t);</script>
+<!-- @inline lab.css -->
+<style>
+  .sw.test { width: 20px; height: 0; border-radius: 0; border-top: 2px dashed var(--neg); }
+  .sw.val { width: 20px; height: 0; border-radius: 0; border-top: 3px solid var(--primary); }
+  .sw.train { width: 20px; height: 0; border-radius: 0; border-top: 2px solid var(--pos); }
+</style>
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+    svg: { fontCache: 'global' },
+    options: { enableMenu: false }
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js"></script>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="{{HOME_URL}}">
+      <span class="crest" aria-hidden="true">UB</span>
+      <span class="brand-text"><strong>Machine Learning 2026 · Week 07</strong><span>University of Bern · Interactive lab</span></span>
+    </a>
+    <div class="header-right">
+      <nav class="site-nav" aria-label="Labs">
+        <a href="{{W06_URL}}">Week 06</a>
+        <a href="{{W07_URL}}" aria-current="page">Week 07</a>
+        <a class="opt" href="#questions">Questions</a>
+      </nav>
+      <label class="theme-pick"><span>Theme</span>
+        <select id="theme-select" aria-label="Colour theme">
+          <option value="auto">Auto</option>
+          <option value="light">Light</option>
+          <option value="reading">Reading</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <section class="wrap hero">
+    <div>
+      <p class="eyebrow">Chapter 9 · Regularization and model selection</p>
+      <h1>Regulari<em>zation</em></h1>
+      <p class="hero-copy">A model that fits the training data perfectly can still predict badly. Regularization adds a penalty \(\lambda R(\theta)\) that prefers simpler parameters; cross validation chooses how much. Explore the \(\ell_2\) and \(\ell_1\) penalties, see why the lasso produces exact zeros, watch gradient descent pick one of many perfect fits, and connect it all to a Bayesian prior.</p>
+    </div>
+    <aside class="hero-card" aria-label="Experiments in this lab">
+      <span>Experiments</span>
+      <ol>
+        <li><b>9.1</b><a href="#m-ridge" data-tab="m-ridge">Ridge: shrinking an overfit</a></li>
+        <li><b>9.1</b><a href="#m-geo" data-tab="m-geo">The geometry of ℓ₁ and ℓ₂</a></li>
+        <li><b>9.1</b><a href="#m-path" data-tab="m-path">Lasso and ridge paths</a></li>
+        <li><b>9.2</b><a href="#m-impl" data-tab="m-impl">Implicit regularization</a></li>
+        <li><b>9.3</b><a href="#m-cv" data-tab="m-cv">Model selection by cross validation</a></li>
+        <li><b>9.4</b><a href="#m-bayes" data-tab="m-bayes">Bayesian view and MAP</a></li>
+      </ol>
+    </aside>
+  </section>
+
+  <div class="wrap">
+    <div class="module-nav" id="nav" role="tablist" aria-label="Experiments" style="--tabs:6">
+      <button role="tab" id="t-ridge" aria-controls="m-ridge"><small>Experiment 1</small><strong>Ridge</strong></button>
+      <button role="tab" id="t-geo" aria-controls="m-geo"><small>Experiment 2</small><strong>ℓ₁ vs ℓ₂</strong></button>
+      <button role="tab" id="t-path" aria-controls="m-path"><small>Experiment 3</small><strong>Paths</strong></button>
+      <button role="tab" id="t-impl" aria-controls="m-impl"><small>Experiment 4</small><strong>Implicit</strong></button>
+      <button role="tab" id="t-cv" aria-controls="m-cv"><small>Experiment 5</small><strong>Cross validation</strong></button>
+      <button role="tab" id="t-bayes" aria-controls="m-bayes"><small>Experiment 6</small><strong>Bayes &amp; MAP</strong></button>
+    </div>
+
+    <!-- ============ 1. Ridge ============ -->
+    <section class="lab-module" id="m-ridge" role="tabpanel" aria-labelledby="t-ridge">
+      <div class="module-heading">
+        <div>
+          <p class="kicker">9.1 · Regularization</p>
+          <h2>Shrinking an overfit polynomial</h2>
+          <p class="lead">A degree-9 polynomial on 12 noisy points interpolates the noise. The \(\ell_2\) penalty pulls the coefficients towards zero. Move \(\lambda\) and watch the curve calm down; the right panel shows the training error (always rising with \(\lambda\)) and the error on fresh validation points, which first falls and then rises.</p>
+        </div>
+        <div class="callout">\[J_\lambda(\theta)=J(\theta)+\frac\lambda2\|\theta\|_2^2\]<span class="src">Eqs. (9.1)–(9.2)</span></div>
+      </div>
+      <div class="preset-row" id="r-presets">
+        <span>Presets</span>
+        <button class="chip" data-preset="none">λ ≈ 0: overfit</button>
+        <button class="chip" data-preset="best">Best validation λ</button>
+        <button class="chip" data-preset="big">λ too large</button>
+      </div>
+      <div class="explainer" id="r-exp"><span>What to look for</span><p></p></div>
+      <div class="lab-layout">
+        <div class="glass controls">
+          <h3>Model</h3>
+          <div class="ctl">
+            <label class="ctl-label" for="r-lam"><span><i>λ</i>regularization</span><output for="r-lam"></output></label>
+            <input type="range" id="r-lam" min="-9" max="1" step="0.05" value="-3">
+          </div>
+          <div class="ctl">
+            <label class="ctl-label" for="r-k"><span><i>k</i>polynomial degree</span><output for="r-k"></output></label>
+            <input type="range" id="r-k" min="1" max="12" step="1" value="9">
+          </div>
+          <button class="btn" id="r-new">Draw a new training set</button>
+          <p class="hint">\(J\) is the mean squared error on the 12 training points. Validation error uses 200 fresh points from the same curve.</p>
+        </div>
+        <div class="glass visual">
+          <div class="toolbar"><span>Fit, coefficients and errors</span>
+            <span class="legend"><span><i class="sw pos"></i>training point</span><span><i class="sw line"></i>fit</span><span><i class="sw dash"></i>true curve</span></span></div>
+          <div class="plots two">
+            <div class="plot-cell">
+              <canvas class="plot wide static" id="r-fit" aria-label="Polynomial fit"></canvas>
+              <canvas class="plot short static" id="r-coef" aria-label="Coefficient sizes"></canvas>
+            </div>
+            <div class="plot-cell"><span class="cap">Error against log₁₀ λ</span><canvas class="plot square static" id="r-err" aria-label="Training and validation error"></canvas></div>
+          </div>
+          <dl class="readout" id="r-read"></dl>
+          <div class="status" id="r-status"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 2. Geometry ============ -->
+    <section class="lab-module" id="m-geo" role="tabpanel" aria-labelledby="t-geo" hidden>
+      <div class="module-heading">
+        <div>
+          <p class="kicker">9.1 · Sparsity and the ℓ₁ penalty</p>
+          <h2>Why the diamond gives zeros</h2>
+          <p class="lead">The ellipses are level sets of a two-parameter loss \(J(\theta)\) with minimum \(\hat\theta\) (drag it). The regularized solution sits where an ellipse first touches a ball of the penalty. The \(\ell_2\) ball is round, so the touching point is almost never on an axis. The \(\ell_1\) ball is a diamond with corners on the axes, and the ellipses often touch a corner: one coordinate becomes exactly zero.</p>
+        </div>
+        <div class="callout">\[\min_\theta\ J(\theta)+\lambda\|\theta\|_1\quad\text{vs.}\quad\min_\theta\ J(\theta)+\tfrac\lambda2\|\theta\|_2^2\]<span class="src">Section 9.1, footnote 3</span></div>
+      </div>
+      <div class="preset-row" id="g-presets">
+        <span>Presets</span>
+        <button class="chip" data-preset="l1">ℓ₁ hits an axis</button>
+        <button class="chip" data-preset="l2">ℓ₂ only shrinks</button>
+        <button class="chip" data-preset="both">Both paths</button>
+      </div>
+      <div class="explainer" id="g-exp"><span>What to look for</span><p></p></div>
+      <div class="lab-layout">
+        <div class="glass controls">
+          <h3>Penalty</h3>
+          <div class="seg" id="g-pen">
+            <button data-v="l1" aria-pressed="true">ℓ₁ (lasso)</button>
+            <button data-v="l2">ℓ₂ (ridge)</button>
+            <button data-v="both">Both</button>
+          </div>
+          <div class="ctl">
+            <label class="ctl-label" for="g-lam"><span><i>λ</i>strength</span><output for="g-lam"></output></label>
+            <input type="range" id="g-lam" min="0" max="2.5" step="0.01" value="0.5">
+          </div>
+          <p class="hint">Drag the black cross \(\hat\theta\). The coloured curve is the whole solution path as \(\lambda\) grows from 0; the dot is the solution at the current \(\lambda\). The dashed shape is the penalty ball through that solution.</p>
+        </div>
+        <div class="glass visual">
+          <div class="toolbar"><span>Parameter space (θ₁, θ₂), equal axis scales</span>
+            <span class="legend"><span><i class="sw" style="background:var(--neg)"></i>ℓ₁ solution</span><span><i class="sw" style="background:var(--pos)"></i>ℓ₂ solution</span><span><i class="sw dash"></i>penalty ball</span></span></div>
+          <div class="plot-cell"><canvas class="plot wide" id="g-plot" aria-label="Loss contours and penalty balls"></canvas></div>
+          <dl class="readout" id="g-read"></dl>
+          <div class="status" id="g-status"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 3. Paths ============ -->
+    <section class="lab-module" id="m-path" role="tabpanel" aria-labelledby="t-path" hidden>
+      <div class="module-heading">
+        <div>
+          <p class="kicker">9.1 · Lasso and ridge for linear models</p>
+          <h2>Which features survive?</h2>
+          <p class="lead">Linear regression with 8 features, of which only 3 truly matter (coloured; the 5 irrelevant ones are grey). Each line follows one coefficient as \(\lambda\) grows from left to right. The lasso sets coefficients exactly to zero one by one and keeps the important ones longest; ridge shrinks all of them smoothly and never reaches zero.</p>
+        </div>
+        <div class="callout">\[\min_\theta\ \frac1{2n}\|y-X\theta\|_2^2+\lambda\|\theta\|_1\]<span class="src">The lasso, Section 9.1</span></div>
+      </div>
+      <div class="preset-row" id="p-presets">
+        <span>Presets</span>
+        <button class="chip" data-preset="lasso">Lasso, best λ</button>
+        <button class="chip" data-preset="ridge">Ridge, best λ</button>
+        <button class="chip" data-preset="strong">Lasso, strong λ</button>
+      </div>
+      <div class="explainer" id="p-exp"><span>What to look for</span><p></p></div>
+      <div class="lab-layout">
+        <div class="glass controls">
+          <h3>Penalty</h3>
+          <div class="seg" id="p-pen">
+            <button data-v="l1" aria-pressed="true">ℓ₁ (lasso)</button>
+            <button data-v="l2">ℓ₂ (ridge)</button>
+          </div>
+          <div class="ctl">
+            <label class="ctl-label" for="p-lam"><span><i>λ</i>regularization</span><output for="p-lam"></output></label>
+            <input type="range" id="p-lam" min="-3" max="1" step="0.02" value="-1">
+          </div>
+          <button class="btn" id="p-new">Draw a new data set</button>
+          <p class="hint">True coefficients \(\theta^*=(3,-2,0,0,1.5,0,0,0)\); \(n=30\) training examples with correlated features. Ridge uses \(\frac1{2n}\|y-X\theta\|^2+\frac\lambda2\|\theta\|^2\).</p>
+        </div>
+        <div class="glass visual">
+          <div class="toolbar"><span>Coefficient paths and validation error</span>
+            <span class="legend"><span><i class="sw" style="background:var(--pos)"></i>θ₁</span><span><i class="sw" style="background:var(--neg)"></i>θ₂</span><span><i class="sw" style="background:var(--good)"></i>θ₅</span><span><i class="sw" style="background:var(--faint)"></i>irrelevant</span></span></div>
+          <div class="plots two">
+            <div class="plot-cell"><span class="cap">Coefficients θⱼ against log₁₀ λ</span><canvas class="plot static" id="p-path-c" aria-label="Coefficient paths"></canvas></div>
+            <div class="plot-cell"><span class="cap">Validation error against log₁₀ λ</span><canvas class="plot static" id="p-val" aria-label="Validation error"></canvas></div>
+          </div>
+          <dl class="readout" id="p-read"></dl>
+          <div class="status" id="p-status"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 4. Implicit regularization ============ -->
+    <section class="lab-module" id="m-impl" role="tabpanel" aria-labelledby="t-impl" hidden>
+      <div class="module-heading">
+        <div>
+          <p class="kicker">9.2 · Implicit regularization effect</p>
+          <h2>Many perfect fits, one chosen by the optimizer</h2>
+          <p class="lead">With more parameters than data points (\(d&gt;n\)), infinitely many \(\theta\) fit the training data exactly. Gradient descent on the unregularized loss still picks a particular one, and which one depends on where it starts. From \(\theta_0=0\) it converges to the minimum-norm interpolant; from a random start it lands elsewhere. Both have zero training error, but they predict differently.</p>
+        </div>
+        <div class="callout">\[\theta_\infty=\theta_0-\Phi^\top(\Phi\Phi^\top)^{-1}(\Phi\theta_0-\vec y)\]<span class="src">Gradient descent on least squares, \(d&gt;n\)</span></div>
+      </div>
+      <div class="preset-row" id="i-presets">
+        <span>Presets</span>
+        <button class="chip" data-preset="small">Small random init</button>
+        <button class="chip" data-preset="large">Large random init</button>
+        <button class="chip" data-preset="few">Barely overparameterized</button>
+      </div>
+      <div class="explainer" id="i-exp"><span>What to look for</span><p></p></div>
+      <div class="lab-layout">
+        <div class="glass controls">
+          <h3>Model f(x) = Σⱼ θⱼ φⱼ(x)</h3>
+          <div class="ctl">
+            <label class="ctl-label" for="i-d"><span><i>d</i>random features</span><output for="i-d"></output></label>
+            <input type="range" id="i-d" min="9" max="200" step="1" value="80">
+          </div>
+          <div class="ctl">
+            <label class="ctl-label" for="i-s"><span><i>s</i>scale of random init θ₀</span><output for="i-s"></output></label>
+            <input type="range" id="i-s" min="0" max="1.5" step="0.01" value="0.4">
+          </div>
+          <div class="btn-row">
+            <button class="btn" id="i-new">New random init</button>
+          </div>
+          <p class="hint">\(n=8\) training points. Features \(\phi_j(x)=\sqrt{2/d}\cos(\omega_jx+c_j)\) with random \(\omega_j,c_j\). Both curves are the exact limits of gradient descent on \(J(\theta)\) with no penalty.</p>
+        </div>
+        <div class="glass visual">
+          <div class="toolbar"><span>Two interpolating solutions</span>
+            <span class="legend"><span><i class="sw pos"></i>training point</span><span><i class="sw line"></i>GD from θ₀ = 0</span><span><i class="sw" style="width:20px;height:0;border-radius:0;border-top:2.5px solid var(--neg)"></i>GD from random θ₀</span><span><i class="sw dash"></i>true curve</span></span></div>
+          <div class="plot-cell"><canvas class="plot wide static" id="i-plot" aria-label="Interpolating solutions"></canvas></div>
+          <dl class="readout" id="i-read"></dl>
+          <div class="status" id="i-status"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 5. Cross validation ============ -->
+    <section class="lab-module" id="m-cv" role="tabpanel" aria-labelledby="t-cv" hidden>
+      <div class="module-heading">
+        <div>
+          <p class="kicker">9.3 · Model selection via cross validation</p>
+          <h2>Pick the degree without peeking at the test set</h2>
+          <p class="lead">Choose the polynomial degree \(k\in\{0,\dots,10\}\) for 30 noisy points. Training error always prefers the largest degree. Hold-out and \(k\)-fold cross validation estimate the error on unseen data using only the training set. The dashed test error uses 500 untouched points and is shown for reference only: in practice you would see it once, after choosing.</p>
+        </div>
+        <div class="callout">\[\hat\varepsilon_{\mathrm{CV}}(M_i)=\frac1k\sum_{j=1}^k\hat\varepsilon_{S_j}(h_{ij})\]<span class="src">k-fold cross validation, Section 9.3</span></div>
+      </div>
+      <div class="preset-row" id="v-presets">
+        <span>Presets</span>
+        <button class="chip" data-preset="train">Select by training error</button>
+        <button class="chip" data-preset="hold">Hold-out 70/30</button>
+        <button class="chip" data-preset="k10">10-fold</button>
+        <button class="chip" data-preset="loo">Leave-one-out</button>
+      </div>
+      <div class="explainer" id="v-exp"><span>What to look for</span><p></p></div>
+      <div class="lab-layout">
+        <div class="glass controls">
+          <h3>Selection rule</h3>
+          <div class="seg" id="v-method">
+            <button data-v="train">Training error</button>
+            <button data-v="hold">Hold-out</button>
+            <button data-v="kfold" aria-pressed="true">k-fold</button>
+          </div>
+          <div class="ctl" data-for="kfold">
+            <label class="ctl-label" for="v-k"><span><i>k</i>folds (30 = leave-one-out)</span><output for="v-k"></output></label>
+            <input type="range" id="v-k" min="2" max="30" step="1" value="10">
+          </div>
+          <div class="ctl" data-for="hold">
+            <label class="ctl-label" for="v-frac"><span><i>p</i>share held out</span><output for="v-frac"></output></label>
+            <input type="range" id="v-frac" min="0.1" max="0.6" step="0.05" value="0.3">
+          </div>
+          <div class="btn-row">
+            <button class="btn" id="v-shuffle">Reshuffle the split</button>
+            <button class="btn" id="v-new">New training set</button>
+          </div>
+          <p class="hint">Errors are mean squared errors on a log scale. After choosing, the selected degree is refit on all 30 points (left plot).</p>
+        </div>
+        <div class="glass visual">
+          <div class="toolbar"><span>Selected fit and error curves</span>
+            <span class="legend"><span><i class="sw train"></i>training</span><span><i class="sw val"></i>selection estimate</span><span><i class="sw test"></i>test (reference)</span></span></div>
+          <div class="plots two">
+            <div class="plot-cell"><canvas class="plot static" id="v-fit" aria-label="Selected polynomial fit"></canvas></div>
+            <div class="plot-cell"><span class="cap">Error against degree (log scale)</span><canvas class="plot static" id="v-err" aria-label="Error curves"></canvas></div>
+          </div>
+          <dl class="readout" id="v-read"></dl>
+          <div class="status" id="v-status"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 6. Bayes ============ -->
+    <section class="lab-module" id="m-bayes" role="tabpanel" aria-labelledby="t-bayes" hidden>
+      <div class="module-heading">
+        <div>
+          <p class="kicker">9.4 · Bayesian statistics and regularization</p>
+          <h2>A prior is a penalty</h2>
+          <p class="lead">Bayesian linear regression \(y=\theta_0+\theta_1x+\varepsilon\), \(\varepsilon\sim\mathcal N(0,\sigma^2)\), with prior \(\theta\sim\mathcal N(0,\tau^2I)\). Reveal data points one by one. Left: the posterior over \((\theta_0,\theta_1)\) concentrates; the MAP estimate is pulled from the MLE towards the prior mean 0. Right: lines drawn from the posterior, and the posterior predictive band.</p>
+        </div>
+        <div class="callout">\[\theta_{\mathrm{MAP}}=\arg\min_\theta\sum_i(y^{(i)}-\theta^\top x^{(i)})^2+\frac{\sigma^2}{\tau^2}\|\theta\|_2^2\]<span class="src">Eq. (9.5) with a Gaussian prior</span></div>
+      </div>
+      <div class="preset-row" id="b-presets">
+        <span>Presets</span>
+        <button class="chip" data-preset="two">Two points</button>
+        <button class="chip" data-preset="many">Twenty points</button>
+        <button class="chip" data-preset="tight">Strong prior</button>
+      </div>
+      <div class="explainer" id="b-exp"><span>What to look for</span><p></p></div>
+      <div class="lab-layout">
+        <div class="glass controls">
+          <h3>Data and prior</h3>
+          <div class="ctl">
+            <label class="ctl-label" for="b-n"><span><i>n</i>data points seen</span><output for="b-n"></output></label>
+            <input type="range" id="b-n" min="0" max="20" step="1" value="3">
+          </div>
+          <div class="ctl">
+            <label class="ctl-label" for="b-tau"><span><i>τ</i>prior standard deviation</span><output for="b-tau"></output></label>
+            <input type="range" id="b-tau" min="-1.3" max="1" step="0.02" value="0">
+          </div>
+          <div class="ctl">
+            <label class="ctl-label" for="b-sig"><span><i>σ</i>noise standard deviation</span><output for="b-sig"></output></label>
+            <input type="range" id="b-sig" min="0.1" max="1.5" step="0.05" value="0.5">
+          </div>
+          <p class="hint">True line: \(y=0.6-1.3x\). The MLE needs at least two points; with fewer, only the prior and MAP exist.</p>
+        </div>
+        <div class="glass visual">
+          <div class="toolbar"><span>Parameter space and data space</span>
+            <span class="legend"><span><i class="sw" style="background:var(--primary)"></i>posterior</span><span><i class="sw neg"></i>MLE</span><span><i class="sw" style="background:var(--fg)"></i>MAP</span><span><i class="sw dash"></i>prior (1σ, 2σ)</span></span></div>
+          <div class="plots two-even">
+            <div class="plot-cell"><span class="cap">Posterior p(θ | S)</span><canvas class="plot square static" id="b-par" aria-label="Posterior over parameters"></canvas></div>
+            <div class="plot-cell"><span class="cap">Data space</span><canvas class="plot square static" id="b-dat" aria-label="Data space"></canvas></div>
+          </div>
+          <dl class="readout" id="b-read"></dl>
+          <div class="status" id="b-status"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ Questions ============ -->
+  <section class="wrap questions" id="questions">
+    <header>
+      <p class="kicker">Check yourself</p>
+      <h2>Discussion questions</h2>
+      <p>Try each question on paper first. Then open the worked answer: it has a derivation, a live calculation you can change, and a one-line takeaway.</p>
+    </header>
+    <div class="q-list">
+
+      <details class="q" id="q1">
+        <summary><span class="q-id">R1</span><span class="q-title">Show that \(\ell_2\) regularization is weight decay for gradient descent.<small>Derive the update (9.2) for \(J_\lambda(\theta)=J(\theta)+\frac\lambda2\|\theta\|_2^2\) with step size \(\eta\).</small></span><span class="q-toggle">Worked answer</span></summary>
+        <div class="q-body">
+          <ol class="steps">
+            <li>The gradient of the penalty is \(\nabla\frac\lambda2\|\theta\|_2^2=\lambda\theta\), so \(\nabla J_\lambda(\theta)=\nabla J(\theta)+\lambda\theta\).</li>
+            <li>One gradient step: \(\theta_{t+1}=\theta_t-\eta\nabla J(\theta_t)-\eta\lambda\theta_t=(1-\eta\lambda)\theta_t-\eta\nabla J(\theta_t)\).</li>
+            <li>Before the usual step, every weight is multiplied by \(1-\eta\lambda&lt;1\): it decays towards zero.</li>
+            <li>With adaptive optimizers (e.g. Adam) the gradient is rescaled per coordinate, so the two are no longer equal; AdamW applies the decay separately (“decoupled”).</li>
+          </ol>
+          <div class="q-side">
+            <div class="ctl"><label class="ctl-label" for="q1-eta"><span><i>η</i>step size</span><output for="q1-eta"></output></label><input type="range" id="q1-eta" min="0.01" max="1" step="0.01" value="0.1"></div>
+            <div class="ctl"><label class="ctl-label" for="q1-lam"><span><i>λ</i>regularization</span><output for="q1-lam"></output></label><input type="range" id="q1-lam" min="0" max="2" step="0.01" value="0.05"></div>
+            <div class="result"><span>Current result</span><div id="q1-out"></div></div>
+            <div class="takeaway"><span>Takeaway</span>An ℓ₂ penalty shrinks every weight by a constant factor per step; the data gradient has to keep pushing to hold a weight away from zero.</div>
+          </div>
+        </div>
+      </details>
+
+      <details class="q" id="q2">
+        <summary><span class="q-id">R2</span><span class="q-title">Why does ℓ₁ produce exact zeros while ℓ₂ does not?<small>Solve the one-dimensional problems \(\min_\theta\frac12(\theta-a)^2+\lambda|\theta|\) and \(\min_\theta\frac12(\theta-a)^2+\frac\lambda2\theta^2\).</small></span><span class="q-toggle">Worked answer</span></summary>
+        <div class="q-body">
+          <ol class="steps">
+            <li>Ridge: setting the derivative \(\theta-a+\lambda\theta\) to zero gives \(\theta^*=a/(1+\lambda)\). It is zero only if \(a=0\).</li>
+            <li>Lasso for \(\theta&gt;0\): \(\theta-a+\lambda=0\Rightarrow\theta=a-\lambda\), valid when \(a&gt;\lambda\). Symmetrically \(\theta=a+\lambda\) when \(a&lt;-\lambda\).</li>
+            <li>If \(|a|\le\lambda\), neither works; at \(\theta=0\) the subgradient \(-a+\lambda[-1,1]\) contains 0, so \(\theta^*=0\).</li>
+            <li>Together: \(\theta^*=\operatorname{sign}(a)\max(|a|-\lambda,0)\), the <em>soft threshold</em>. Small coefficients become exactly zero; large ones are shifted by \(\lambda\).</li>
+          </ol>
+          <div class="q-side">
+            <div class="ctl"><label class="ctl-label" for="q2-a"><span><i>a</i>unpenalized value</span><output for="q2-a"></output></label><input type="range" id="q2-a" min="-3" max="3" step="0.05" value="0.8"></div>
+            <div class="ctl"><label class="ctl-label" for="q2-l"><span><i>λ</i>regularization</span><output for="q2-l"></output></label><input type="range" id="q2-l" min="0" max="2" step="0.05" value="1"></div>
+            <canvas class="plot short static" id="q2-plot" aria-label="Soft threshold and ridge shrinkage"></canvas>
+            <div class="result"><span>Current result</span><div id="q2-out"></div></div>
+            <div class="takeaway"><span>Takeaway</span>The kink of |θ| at zero creates a whole interval of values that map to exactly 0; the smooth θ² has no such interval.</div>
+          </div>
+        </div>
+      </details>
+
+      <details class="q" id="q3">
+        <summary><span class="q-id">R3</span><span class="q-title">Why is selecting a model by its training error a bad idea?<small>Consider polynomial models of degree \(k=0,1,\dots,10\) fitted by least squares.</small></span><span class="q-toggle">Worked answer</span></summary>
+        <div class="q-body">
+          <ol class="steps">
+            <li>The models are nested: every degree-\(k\) polynomial is also a degree-\((k+1)\) polynomial with \(\theta_{k+1}=0\).</li>
+            <li>Least squares minimizes training error over the model class, so a larger class can never do worse: training error is non-increasing in \(k\).</li>
+            <li>The rule therefore always picks the most complex model, which has the highest variance and typically the worst error on new data.</li>
+            <li>Validation data, not used for fitting, give an estimate of the error on unseen data and break the tie towards complexity.</li>
+          </ol>
+          <div class="q-side">
+            <div class="result"><span>Current result from Experiment 5</span><div id="q3-out"></div></div>
+            <div class="takeaway"><span>Takeaway</span>Training error measures how well a model memorizes, not how well it generalizes.</div>
+          </div>
+        </div>
+      </details>
+
+      <details class="q" id="q4">
+        <summary><span class="q-id">R4</span><span class="q-title">What does k-fold cross validation cost, and when is leave-one-out worth it?<small>Count the model fits for \(|\mathcal M|\) candidate models.</small></span><span class="q-toggle">Worked answer</span></summary>
+        <div class="q-body">
+          <ol class="steps">
+            <li>Hold-out: each model is fitted once on about \(0.7n\) examples: \(|\mathcal M|\) fits, plus one refit of the winner.</li>
+            <li>\(k\)-fold: each model is fitted once per fold on \((1-1/k)n\) examples: \(k|\mathcal M|\) fits, plus one refit.</li>
+            <li>Leave-one-out is \(k=n\): \(n|\mathcal M|\) fits, each on \(n-1\) examples, so the selection uses nearly all data each time.</li>
+            <li>LOO is worth its cost when data are scarce (each held-out example matters) and fitting is cheap; \(k=10\) is the usual compromise.</li>
+          </ol>
+          <div class="q-side">
+            <div class="ctl"><label class="ctl-label" for="q4-n"><span><i>n</i>examples</span><output for="q4-n"></output></label><input type="range" id="q4-n" min="10" max="10000" step="10" value="100"></div>
+            <div class="ctl"><label class="ctl-label" for="q4-m"><span><i>|𝓜|</i>candidate models</span><output for="q4-m"></output></label><input type="range" id="q4-m" min="1" max="50" step="1" value="11"></div>
+            <div class="ctl"><label class="ctl-label" for="q4-k"><span><i>k</i>folds</span><output for="q4-k"></output></label><input type="range" id="q4-k" min="2" max="20" step="1" value="10"></div>
+            <div class="result"><span>Current result</span><div id="q4-out"></div></div>
+            <div class="takeaway"><span>Takeaway</span>More folds mean less data wasted per fit and more fits to pay for.</div>
+          </div>
+        </div>
+      </details>
+
+      <details class="q" id="q5">
+        <summary><span class="q-id">R5</span><span class="q-title">Show that MAP with a Gaussian prior is ridge regression.<small>Model \(y^{(i)}=\theta^\top x^{(i)}+\varepsilon^{(i)}\), \(\varepsilon^{(i)}\sim\mathcal N(0,\sigma^2)\), prior \(\theta\sim\mathcal N(0,\tau^2I)\).</small></span><span class="q-toggle">Worked answer</span></summary>
+        <div class="q-body">
+          <ol class="steps">
+            <li>MAP maximizes \(\prod_ip(y^{(i)}\mid x^{(i)},\theta)\,p(\theta)\), equivalently minimizes its negative logarithm (9.5).</li>
+            <li>\(-\log p(y^{(i)}\mid x^{(i)},\theta)=\frac1{2\sigma^2}(y^{(i)}-\theta^\top x^{(i)})^2+\text{const}\) and \(-\log p(\theta)=\frac1{2\tau^2}\|\theta\|_2^2+\text{const}\).</li>
+            <li>Multiplying by \(2\sigma^2&gt;0\) does not change the minimizer: \(\theta_{\mathrm{MAP}}=\arg\min_\theta\sum_i(y^{(i)}-\theta^\top x^{(i)})^2+\frac{\sigma^2}{\tau^2}\|\theta\|_2^2\).</li>
+            <li>This is ridge regression with \(\lambda=\sigma^2/\tau^2\): noisy data or a tight prior mean strong regularization. The closed form is \(\theta_{\mathrm{MAP}}=(X^\top X+\lambda I)^{-1}X^\top\vec y\).</li>
+          </ol>
+          <div class="q-side">
+            <div class="result"><span>Current result from Experiment 6</span><div id="q5-out"></div></div>
+            <div class="takeaway"><span>Takeaway</span>A Gaussian prior centred at zero is an ℓ₂ penalty; its strength is the ratio of noise variance to prior variance.</div>
+          </div>
+        </div>
+      </details>
+
+      <details class="q" id="q6">
+        <summary><span class="q-id">R6</span><span class="q-title">Why does gradient descent from \(\theta_0=0\) find the minimum-norm interpolant?<small>Least squares \(J(\theta)=\frac1n\|\Phi\theta-\vec y\|^2\) with \(\Phi\in\mathbb R^{n\times d}\), \(d&gt;n\), full row rank.</small></span><span class="q-toggle">Worked answer</span></summary>
+        <div class="q-body">
+          <ol class="steps">
+            <li>The gradient \(\frac2n\Phi^\top(\Phi\theta-\vec y)\) always lies in the row space of \(\Phi\), \(\operatorname{span}(\Phi^\top)\).</li>
+            <li>Starting at \(\theta_0=0\), every iterate is a sum of such vectors, so \(\theta_t\in\operatorname{span}(\Phi^\top)\) for all \(t\).</li>
+            <li>The interpolants are \(\{\theta:\Phi\theta=\vec y\}=\theta^\dagger+\operatorname{null}(\Phi)\). Exactly one of them lies in the row space: \(\theta^\dagger=\Phi^\top(\Phi\Phi^\top)^{-1}\vec y\).</li>
+            <li>Since row space and null space are orthogonal, \(\|\theta^\dagger+v\|^2=\|\theta^\dagger\|^2+\|v\|^2\): \(\theta^\dagger\) has the smallest norm. A nonzero \(\theta_0\) keeps its null-space component forever.</li>
+          </ol>
+          <div class="q-side">
+            <div class="result"><span>Current result from Experiment 4</span><div id="q6-out"></div></div>
+            <div class="takeaway"><span>Takeaway</span>The optimizer and its starting point act as a regularizer even when the loss has none.</div>
+          </div>
+        </div>
+      </details>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Machine Learning 2026 · Week 07 · Based on the lecture notes, Chapter 9 (Regularization and Model Selection).</span>
+    <span>Back to the <a href="{{W06_URL}}">deep learning lab</a>.</span>
+  </div>
+</footer>
+
+<!-- @inline lab.js -->
+<script>
+(function () {
+  'use strict';
+  const { $, $$, fmt, Plot } = Lab;
+  const css = Lab.css;
+  Lab.tabs('nav');
+  const hooks = {};
+  const showFor = (root, keys) => $$('[data-for]', root).forEach(el => { el.hidden = !keys.includes(el.dataset.for); });
+
+  /* ---------- small linear-algebra helpers ---------- */
+  const T = A => A[0].map((_, j) => A.map(r => r[j]));
+  const matmul = (A, B) => A.map(r => B[0].map((_, j) => r.reduce((s, v, k) => s + v * B[k][j], 0)));
+  const matvec = (A, v) => A.map(r => r.reduce((s, a, k) => s + a * v[k], 0));
+  const ridge = (X, y, alpha) => { // argmin ||y - Xθ||² + alpha ||θ||²
+    const XtX = matmul(T(X), X); XtX.forEach((r, i) => { r[i] += alpha; });
+    return Lab.solve(XtX, matvec(T(X), y)) || new Array(X[0].length).fill(0);
+  };
+  const polyRow = (x, k) => Array.from({ length: k + 1 }, (_, j) => Math.pow(x, j));
+  const mse = (pred, y) => pred.reduce((s, p, i) => s + (p - y[i]) ** 2, 0) / y.length;
+  const truth = x => Math.sin(2.6 * x) + 0.3 * x;
+
+  /* =====================================================================
+     1. Ridge on a polynomial
+     ===================================================================== */
+  (function ridgeExp() {
+    let seed = 3, Xtr = [], Ytr = [];
+    const rv = Lab.rng(99), Xva = Array.from({ length: 200 }, () => 2 * rv() - 1), Yva = Xva.map(x => truth(x) + 0.2 * rv.normal());
+    function load() { const r = Lab.rng(seed); Xtr = Array.from({ length: 12 }, (_, i) => -0.95 + 1.9 * (i + 0.6 * r()) / 12); Ytr = Xtr.map(x => truth(x) + 0.2 * r.normal()); }
+    const lam = Lab.range('r-lam', { map: v => Math.pow(10, v), show: v => v.toExponential(1), on: () => { pre.clear(); draw(); } });
+    const k = Lab.range('r-k', { on: () => { pre.clear(); draw(); } });
+    // J = (1/n)Σ(...)², J_λ = J + (λ/2)||θ||²  ⇒  (ΦᵀΦ + (nλ/2) I) θ = Φᵀy
+    const fitAt = (l, kk) => ridge(Xtr.map(x => polyRow(x, kk)), Ytr, Xtr.length * l / 2);
+    const pred = (th, x) => th.reduce((s, t, j) => s + t * Math.pow(x, j), 0);
+    const grid = Array.from({ length: 81 }, (_, i) => -9 + i * 10 / 80);
+    let curves = null;
+    const errCurves = () => grid.map(lg => { const th = fitAt(Math.pow(10, lg), k()); return [lg, mse(Xtr.map(x => pred(th, x)), Ytr), mse(Xva.map(x => pred(th, x)), Yva)]; });
+    const fp = new Plot('r-fit', { xmin: -1.05, xmax: 1.05, ymin: -2.2, ymax: 2.2, pad: { l: 40, b: 32, t: 14, r: 14 } });
+    fp.draw = (p) => {
+      const th = fitAt(lam(), k());
+      p.axes({ xlabel: 'x', ylabel: 'y' });
+      p.curve(truth, { color: css('--muted'), width: 1.5, dash: [6, 4] });
+      p.curve(x => pred(th, x), { color: css('--fg'), width: 2.6 });
+      Xtr.forEach((x, i) => p.marker(x, Ytr[i], 1, { r: 5 }));
+    };
+    const cp = new Plot('r-coef', { xmin: -0.5, xmax: 12.5, ymin: -1, ymax: 1, pad: { l: 50, b: 26, t: 22, r: 14 } });
+    cp.draw = (p, ctx) => {
+      const th = fitAt(lam(), k()), mx = Math.max(0.5, ...th.map(Math.abs)) * 1.15;
+      p.o.ymin = -mx; p.o.ymax = mx; p.o.xmax = 12.5; p.layout();
+      p.axes({ xfmt: t => 'θ' + t.toFixed(0), yfmt: t => fmt(t, Math.abs(t) >= 10 ? 0 : 1) });
+      th.forEach((t, j) => { ctx.fillStyle = css('--primary'); ctx.fillRect(p.X(j - 0.32), Math.min(p.Y(t), p.Y(0)), 0.64 * p.sx, Math.max(1.5, Math.abs(p.Y(t) - p.Y(0)))); });
+    };
+    const ep = new Plot('r-err', { xmin: -9, xmax: 1, ymin: -2.5, ymax: 1, pad: { l: 50, b: 36, t: 30, r: 14 } });
+    ep.draw = (p, ctx) => {
+      const ys = curves.flatMap(c => [c[1], c[2]]).map(v => Math.log10(Math.max(v, 1e-6)));
+      p.o.ymin = Math.min(...ys) - 0.1; p.o.ymax = Math.min(2, Math.max(...ys)) + 0.1; p.layout();
+      p.axes({ xlabel: 'log₁₀ λ', yfmt: t => '10^' + t.toFixed(1) });
+      [[1, css('--pos'), 2], [2, css('--primary'), 3]].forEach(([idx, col, w]) => {
+        ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath();
+        curves.forEach((c, i) => { const X0 = p.X(c[0]), Y0 = p.Y(Math.log10(Math.max(c[idx], 1e-6))); i ? ctx.lineTo(X0, Y0) : ctx.moveTo(X0, Y0); }); ctx.stroke();
+      });
+      const lg = Math.log10(lam());
+      ctx.strokeStyle = css('--fg'); ctx.setLineDash([3, 3]); ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(p.X(lg), p.o.pad.t); ctx.lineTo(p.X(lg), p.o.pad.t + p.ph); ctx.stroke(); ctx.setLineDash([]);
+      p.label('training', p.v.xmin, Math.log10(Math.max(curves[0][1], 1e-6)), { dx: 6, dy: -10, color: css('--pos'), font: `600 12.5px ${css('--font-body')}` });
+      p.label('validation', p.v.xmin, Math.log10(Math.max(curves[0][2], 1e-6)), { dx: 6, dy: -10, color: css('--primary'), font: `600 12.5px ${css('--font-body')}` });
+    };
+    const best = () => curves.reduce((b, c) => (c[2] < b[2] ? c : b));
+    function draw() {
+      curves = errCurves();
+      fp.render(); cp.render(); ep.render();
+      const th = fitAt(lam(), k()), tr = mse(Xtr.map(x => pred(th, x)), Ytr), va = mse(Xva.map(x => pred(th, x)), Yva), b = best();
+      $('#r-read').innerHTML = `
+        <div><dt>‖θ‖₂</dt><dd>${fmt(Math.hypot(...th), 3)}</dd></div>
+        <div><dt>training MSE</dt><dd>${fmt(tr, 4)}</dd></div>
+        <div><dt>validation MSE</dt><dd>${fmt(va, 4)}</dd></div>
+        <div><dt>best λ on validation</dt><dd>${Math.pow(10, b[0]).toExponential(1)}</dd></div>`;
+      const lg = Math.log10(lam()), st = $('#r-status');
+      if (lg < b[0] - 1.5) st.innerHTML = `<b class="bad">Overfitting.</b> Training error ${fmt(tr, 3)} is far below validation error ${fmt(va, 3)}; the coefficients are large and cancel each other between the points.`;
+      else if (lg > b[0] + 1.5) st.innerHTML = `<b class="bad">Too much bias.</b> The penalty dominates: all coefficients are pushed towards zero and the curve flattens, so both training and validation error rise.`;
+      else st.innerHTML = `<b class="ok">Near the best trade-off.</b> The penalty removes the wiggles without flattening the curve; validation error is close to its minimum ${fmt(b[2], 3)}.`;
+      hooks.ridge = { lam: lam(), norm: Math.hypot(...th) };
+    }
+    $('#r-new').addEventListener('click', () => { seed++; load(); pre.clear(); draw(); });
+    const pre = Lab.presets('r-presets', 'r-exp', {
+      none: { text: 'With \\(\\lambda\\approx0\\) the degree-9 polynomial passes through nearly every point. Look at the coefficient bars: huge values with alternating signs, the signature of an overfit.' },
+      best: { text: 'At the λ that minimizes validation error, the curve follows the true shape and ignores most of the noise. Coefficients are moderate.' },
+      big: { text: 'A very large λ makes \\(\\|\\theta\\|\\) the main concern. The fit shrinks towards the constant 0 and misses the trend: high bias.' }
+    }, key => {
+      k.set(9);
+      if (key === 'none') lam.set(-9); else if (key === 'big') lam.set(0.5); else { curves = errCurves(); lam.set(best()[0]); }
+      draw();
+    });
+    load();
+    pre.select('none');
+  })();
+
+  /* =====================================================================
+     2. Geometry of ℓ1 and ℓ2
+     ===================================================================== */
+  (function geometry() {
+    const A = [[1.0, 0.5], [0.5, 0.7]];
+    const th = { x: 1.6, y: 0.45 };
+    const pen = Lab.seg('g-pen', () => { pre.clear(); draw(); });
+    const lam = Lab.range('g-lam', { show: v => v.toFixed(2), on: () => { pre.clear(); draw(); } });
+    const J = (a, b) => { const d = [a - th.x, b - th.y]; return 0.5 * (A[0][0] * d[0] * d[0] + 2 * A[0][1] * d[0] * d[1] + A[1][1] * d[1] * d[1]); };
+    const l2sol = l => { const M = [[A[0][0] + l, A[0][1]], [A[1][0], A[1][1] + l]], rhs = matvec(A, [th.x, th.y]); return Lab.solve(M, rhs); };
+    const soft = (z, t) => Math.sign(z) * Math.max(Math.abs(z) - t, 0);
+    const l1sol = l => { // exact coordinate descent for 2-D lasso
+      let t = [th.x, th.y]; const c = matvec(A, [th.x, th.y]);
+      for (let it = 0; it < 200; it++) {
+        t[0] = soft(c[0] - A[0][1] * t[1], l) / A[0][0];
+        t[1] = soft(c[1] - A[1][0] * t[0], l) / A[1][1];
+      }
+      return t;
+    };
+    const p = new Plot('g-plot', { xmin: -1, xmax: 2.6, ymin: -0.8, ymax: 1.6, equal: true, pad: { l: 40, b: 34, t: 14, r: 14 } });
+    p.draw = (pl, ctx) => {
+      pl.axes({ xlabel: 'θ₁', ylabel: 'θ₂' });
+      const levels = [0.02, 0.1, 0.25, 0.5, 0.9, 1.4, 2];
+      levels.forEach(lv => pl.contour(J, lv, { color: css('--plot-axis'), width: 1, res: 5 }));
+      const show = pen() === 'both' ? ['l1', 'l2'] : [pen()];
+      const lmax = 2.5;
+      show.forEach(kind => {
+        const col = kind === 'l1' ? css('--neg') : css('--pos');
+        const sol = l => (kind === 'l1' ? l1sol(l) : l2sol(l));
+        ctx.strokeStyle = col; ctx.lineWidth = 2.2; ctx.globalAlpha = 0.85; ctx.beginPath();
+        for (let i = 0; i <= 120; i++) { const l = lmax * Math.pow(i / 120, 2) * 4; const s = sol(l); i ? ctx.lineTo(pl.X(s[0]), pl.Y(s[1])) : ctx.moveTo(pl.X(s[0]), pl.Y(s[1])); }
+        ctx.stroke(); ctx.globalAlpha = 1;
+        const s = sol(lam());
+        // penalty ball through the current solution
+        ctx.save(); ctx.strokeStyle = col; ctx.setLineDash([6, 4]); ctx.lineWidth = 1.6; ctx.beginPath();
+        if (kind === 'l1') { const rr = Math.abs(s[0]) + Math.abs(s[1]); [[rr, 0], [0, rr], [-rr, 0], [0, -rr], [rr, 0]].forEach(([u, v], i) => (i ? ctx.lineTo(pl.X(u), pl.Y(v)) : ctx.moveTo(pl.X(u), pl.Y(v)))); }
+        else { const rr = Math.hypot(s[0], s[1]); ctx.arc(pl.X(0), pl.Y(0), rr * pl.sx, 0, 2 * Math.PI); }
+        ctx.stroke(); ctx.restore();
+        pl.contour(J, J(s[0], s[1]), { color: col, width: 1.4, res: 4 });
+        pl.dot(s[0], s[1], { r: 6.5, color: col });
+      });
+      const X = pl.X(th.x), Y = pl.Y(th.y);
+      ctx.strokeStyle = css('--fg'); ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(X - 8, Y - 8); ctx.lineTo(X + 8, Y + 8); ctx.moveTo(X - 8, Y + 8); ctx.lineTo(X + 8, Y - 8); ctx.stroke();
+      pl.label('θ̂', th.x, th.y, { dx: 10, dy: -12, font: `italic 600 16px ${css('--font-display')}`, color: css('--fg') });
+    };
+    Lab.drag(p, { pts: () => [th], hitPx: 22, onMove: (i, x, y) => { th.x = x; th.y = y; pre.clear(); draw(); } });
+    function draw() {
+      p.render();
+      const s1 = l1sol(lam()), s2 = l2sol(lam());
+      $('#g-read').innerHTML = `
+        <div><dt>θ̂ (λ = 0)</dt><dd>(${fmt(th.x, 2)}, ${fmt(th.y, 2)})</dd></div>
+        <div><dt>ℓ₁ solution</dt><dd>(${fmt(s1[0], 3)}, ${fmt(s1[1], 3)})</dd></div>
+        <div><dt>ℓ₂ solution</dt><dd>(${fmt(s2[0], 3)}, ${fmt(s2[1], 3)})</dd></div>
+        <div><dt>exact zeros (ℓ₁ / ℓ₂)</dt><dd>${s1.filter(v => v === 0).length} / ${s2.filter(v => Math.abs(v) < 1e-12).length}</dd></div>`;
+      const z = s1.filter(v => v === 0).length, st = $('#g-status');
+      st.innerHTML = z === 2 ? `<b class="ok">ℓ₁: both coefficients are zero.</b> λ is so large that the diamond has shrunk to the origin. The ℓ₂ solution is small but still nonzero in both coordinates.`
+        : z === 1 ? `<b class="ok">ℓ₁: one coefficient is exactly zero.</b> The ellipse touches the diamond at a corner on an axis. The ℓ₂ solution at the same λ has both coordinates nonzero.`
+        : `<b>No exact zeros yet.</b> Both solutions are interior. Increase λ: the ℓ₁ path will hit an axis at a finite λ, the ℓ₂ path only approaches the origin.`;
+    }
+    const pre = Lab.presets('g-presets', 'g-exp', {
+      l1: { text: 'With λ = 0.6 the lasso solution has hit the θ₁-axis: \\(\\theta_2=0\\) exactly. The red dashed diamond and the red ellipse touch at its corner.' },
+      l2: { text: 'Ridge shrinks along a curved path towards the origin. The blue circle touches the ellipse at a point where both coordinates are nonzero, for every λ.' },
+      both: { text: 'Both solution paths together. They start at \\(\\hat\\theta\\) (λ = 0). The red ℓ₁ path bends onto an axis and then runs along it to 0; the blue ℓ₂ path curves smoothly to 0.' }
+    }, key => { pen.set(key); th.x = 1.6; th.y = 0.45; lam.set(key === 'both' ? 0.4 : 0.6); draw(); });
+    pre.select('l1');
+  })();
+
+  /* =====================================================================
+     3. Lasso and ridge paths
+     ===================================================================== */
+  (function paths() {
+    const d = 8, n = 30, thetaStar = [3, -2, 0, 0, 1.5, 0, 0, 0];
+    let seed = 8, X, y, Xv, yv, path1, path2;
+    const grid = Array.from({ length: 101 }, (_, i) => -3 + 4 * i / 100);
+    function gen(r, m) {
+      return Array.from({ length: m }, () => { const z = r.normal(); return Array.from({ length: d }, () => 0.6 * z + 0.8 * r.normal()); });
+    }
+    function load() {
+      const r = Lab.rng(seed);
+      X = gen(r, n); y = X.map(x => Lab.dot(x, thetaStar) + 1.5 * r.normal());
+      Xv = gen(r, 400); yv = Xv.map(x => Lab.dot(x, thetaStar) + 1.5 * r.normal());
+      const colNorm = j => X.reduce((s, x) => s + x[j] * x[j], 0) / n;
+      const cn = Array.from({ length: d }, (_, j) => colNorm(j));
+      const lasso = (lam, warm) => { // coordinate descent on (1/2n)||y - Xθ||² + λ||θ||₁
+        const t = warm.slice(), res = y.map((yi, i) => yi - Lab.dot(X[i], t));
+        for (let sweep = 0; sweep < 200; sweep++) {
+          let delta = 0;
+          for (let j = 0; j < d; j++) {
+            const rho = X.reduce((s, x, i) => s + x[j] * (res[i] + x[j] * t[j]), 0) / n;
+            const nt = Math.sign(rho) * Math.max(Math.abs(rho) - lam, 0) / cn[j];
+            const dt = nt - t[j];
+            if (dt) { X.forEach((x, i) => { res[i] -= x[j] * dt; }); t[j] = nt; delta = Math.max(delta, Math.abs(dt)); }
+          }
+          if (delta < 1e-9) break;
+        }
+        return t;
+      };
+      let warm = new Array(d).fill(0);
+      path1 = grid.slice().reverse().map(lg => { warm = lasso(Math.pow(10, lg), warm); return warm.slice(); }).reverse();
+      path2 = grid.map(lg => ridge(X, y, n * Math.pow(10, lg)));
+    }
+    const pen = Lab.seg('p-pen', () => { pre.clear(); draw(); });
+    const lam = Lab.range('p-lam', { map: v => Math.pow(10, v), show: v => v.toExponential(1), on: () => { pre.clear(); draw(); } });
+    const cur = () => { const P = pen() === 'l1' ? path1 : path2; const i = Math.round((Math.log10(lam()) + 3) / 4 * 100); return P[Lab.clamp(i, 0, 100)]; };
+    const val = t => mse(Xv.map(x => Lab.dot(x, t)), yv);
+    const colors = () => [css('--pos'), css('--neg'), css('--faint'), css('--faint'), css('--good'), css('--faint'), css('--faint'), css('--faint')];
+    const pp = new Plot('p-path-c', { xmin: -3, xmax: 1, ymin: -3, ymax: 3.5, pad: { l: 44, b: 36, t: 30, r: 34 } });
+    pp.draw = (p, ctx) => {
+      const P = pen() === 'l1' ? path1 : path2, cs = colors();
+      p.axes({ xlabel: 'log₁₀ λ' });
+      [2, 3, 5, 6, 7, 0, 1, 4].forEach(j => {
+        ctx.strokeStyle = cs[j]; ctx.lineWidth = thetaStar[j] ? 2.6 : 1.5; ctx.beginPath();
+        P.forEach((t, i) => { const X0 = p.X(grid[i]), Y0 = p.Y(t[j]); i ? ctx.lineTo(X0, Y0) : ctx.moveTo(X0, Y0); }); ctx.stroke();
+        p.label('θ' + (j + 1), grid[0], P[0][j], { dx: -4, align: 'right', font: `12px ${css('--font-mono')}`, color: thetaStar[j] ? cs[j] : css('--faint') });
+      });
+      const lg = Math.log10(lam());
+      ctx.strokeStyle = css('--fg'); ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(p.X(lg), p.o.pad.t); ctx.lineTo(p.X(lg), p.o.pad.t + p.ph); ctx.stroke(); ctx.setLineDash([]);
+    };
+    const vp = new Plot('p-val', { xmin: -3, xmax: 1, ymin: 0, ymax: 10, pad: { l: 44, b: 36, t: 30, r: 14 } });
+    vp.draw = (p, ctx) => {
+      const v1 = path1.map(val), v2 = path2.map(val), all = v1.concat(v2);
+      p.o.ymin = 0; p.o.ymax = Math.min(20, Math.max(...all)) * 1.05; p.layout();
+      p.axes({ xlabel: 'log₁₀ λ' });
+      [[v1, css('--neg'), pen() === 'l1'], [v2, css('--pos'), pen() === 'l2']].forEach(([v, c, on]) => {
+        ctx.strokeStyle = c; ctx.lineWidth = on ? 3 : 1.5; ctx.globalAlpha = on ? 1 : 0.5; ctx.beginPath();
+        v.forEach((e, i) => { const X0 = p.X(grid[i]), Y0 = p.Y(Math.min(e, p.v.ymax)); i ? ctx.lineTo(X0, Y0) : ctx.moveTo(X0, Y0); }); ctx.stroke(); ctx.globalAlpha = 1;
+      });
+      p.label('lasso', grid[100], v1[100], { align: 'right', dx: -4, dy: -10, color: css('--neg'), font: `600 12.5px ${css('--font-body')}` });
+      p.label('ridge', grid[100], Math.min(v2[100], p.v.ymax), { align: 'right', dx: -4, dy: 12, color: css('--pos'), font: `600 12.5px ${css('--font-body')}` });
+      const lg = Math.log10(lam());
+      ctx.strokeStyle = css('--fg'); ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(p.X(lg), p.o.pad.t); ctx.lineTo(p.X(lg), p.o.pad.t + p.ph); ctx.stroke(); ctx.setLineDash([]);
+    };
+    const bestIdx = P => P.map(val).reduce((b, v, i, a) => (v < a[b] ? i : b), 0);
+    function draw() {
+      pp.render(); vp.render();
+      const t = cur(), nz = t.filter(v => Math.abs(v) > 1e-10).length;
+      const support = t.map(v => Math.abs(v) > 1e-10);
+      const correct = support.every((s, j) => s === (thetaStar[j] !== 0));
+      $('#p-read').innerHTML = `
+        <div><dt>nonzero coefficients</dt><dd>${nz} of ${d}</dd></div>
+        <div><dt>validation MSE</dt><dd>${fmt(val(t), 3)}</dd></div>
+        <div><dt>θ (rounded)</dt><dd>(${t.map(v => Math.abs(v) < 1e-10 ? '0' : fmt(v, 1)).join(', ')})</dd></div>`;
+      const st = $('#p-status');
+      if (pen() === 'l1') st.innerHTML = correct ? `<b class="ok">The lasso found exactly the three true features.</b> Every irrelevant coefficient is exactly zero; the relevant ones are shrunk by roughly λ.` : nz === 0 ? `<b class="bad">Everything is zero.</b> λ exceeds the largest correlation between a feature and y, so the empty model wins.` : `<b>${nz} nonzero coefficient${nz === 1 ? '' : 's'}.</b> ${nz > 3 ? 'Some irrelevant features are still in the model; increase λ.' : 'A true feature has been removed; λ is too large.'}`;
+      else st.innerHTML = `<b class="bad">Ridge keeps all ${d} features.</b> Irrelevant coefficients shrink towards zero but never reach it, so ridge does not select features. Its validation error can still be good.`;
+    }
+    $('#p-new').addEventListener('click', () => { seed++; load(); pre.clear(); draw(); });
+    const pre = Lab.presets('p-presets', 'p-exp', {
+      lasso: { text: 'At the λ with the lowest lasso validation error, the irrelevant grey lines have already hit zero while the three coloured ones stay large. Read the path from left to right: features drop out one at a time.' },
+      ridge: { text: 'Ridge paths shrink smoothly. Even at its best λ, the grey coefficients are small but nonzero, so all 8 features remain in the model.' },
+      strong: { text: 'At a large λ the lasso drops even true features and keeps only the strongest ones. Validation error rises: too much sparsity adds bias, as the notes warn.' }
+    }, key => {
+      if (key === 'lasso') { pen.set('l1'); lam.set(grid[bestIdx(path1)]); }
+      if (key === 'ridge') { pen.set('l2'); lam.set(grid[bestIdx(path2)]); }
+      if (key === 'strong') { pen.set('l1'); lam.set(0.3); }
+      draw();
+    });
+    load();
+    pre.select('lasso');
+  })();
+
+  /* =====================================================================
+     4. Implicit regularization
+     ===================================================================== */
+  (function implicit() {
+    const n = 8, D = 200;
+    const r = Lab.rng(12), W = Array.from({ length: D }, () => 8 * r.normal()), C = Array.from({ length: D }, () => 2 * Math.PI * r());
+    const xs = Array.from({ length: n }, (_, i) => -0.9 + 1.8 * (i + 0.5 * r()) / n), ys = xs.map(x => truth(x) + 0.05 * r.normal());
+    let initSeed = 1;
+    const d = Lab.range('i-d', { on: () => { pre.clear(); draw(); } });
+    const s = Lab.range('i-s', { show: v => v.toFixed(2), on: () => { pre.clear(); draw(); } });
+    const feat = (x, dd) => Array.from({ length: dd }, (_, j) => Math.sqrt(2 / dd) * Math.cos(W[j] * x + C[j]));
+    function solve() {
+      const dd = d(), Phi = xs.map(x => feat(x, dd));
+      const G = matmul(Phi, T(Phi)); // n×n
+      const ri = Lab.rng(initSeed), th0 = Array.from({ length: dd }, () => s() * ri.normal());
+      const res = (th) => Phi.map((row, i) => Lab.dot(row, th) - ys[i]);
+      const proj = th => { const a = Lab.solve(G.map(rw => rw.slice()), res(th)); return th.map((t, j) => t - Phi.reduce((acc, row, i) => acc + row[j] * a[i], 0)); };
+      const thMin = proj(new Array(dd).fill(0)), thRand = proj(th0);
+      return { dd, thMin, thRand, th0 };
+    }
+    const tx = Array.from({ length: 300 }, (_, i) => -0.95 + 1.9 * i / 299);
+    let S;
+    const f = (th, x) => Lab.dot(feat(x, th.length), th);
+    const p = new Plot('i-plot', { xmin: -1.05, xmax: 1.05, ymin: -2.5, ymax: 2.5, pad: { l: 40, b: 34, t: 14, r: 14 } });
+    p.draw = (pl) => {
+      pl.axes({ xlabel: 'x', ylabel: 'y' });
+      pl.curve(truth, { color: css('--muted'), width: 1.5, dash: [6, 4] });
+      pl.curve(x => f(S.thRand, x), { color: css('--neg'), width: 2.4 });
+      pl.curve(x => f(S.thMin, x), { color: css('--fg'), width: 2.6 });
+      xs.forEach((x, i) => pl.marker(x, ys[i], 1, { r: 6 }));
+    };
+    function draw() {
+      S = solve(); p.render();
+      const trainErr = th => mse(xs.map(x => f(th, x)), ys), testErr = th => mse(tx.map(x => f(th, x)), tx.map(truth));
+      const nMin = Math.hypot(...S.thMin), nRand = Math.hypot(...S.thRand);
+      $('#i-read').innerHTML = `
+        <div><dt>training MSE (0 / random)</dt><dd>${trainErr(S.thMin).toExponential(0)} / ${trainErr(S.thRand).toExponential(0)}</dd></div>
+        <div><dt>‖θ‖₂ (0 / random)</dt><dd>${fmt(nMin, 2)} / ${fmt(nRand, 2)}</dd></div>
+        <div><dt>test MSE (0 / random)</dt><dd>${fmt(testErr(S.thMin), 3)} / ${fmt(testErr(S.thRand), 3)}</dd></div>
+        <div><dt>parameters vs data</dt><dd>d = ${S.dd}, n = ${n}</dd></div>`;
+      const st = $('#i-status');
+      st.innerHTML = s() === 0 ? `<b class="ok">Both starts are θ₀ = 0,</b> so both runs give the same minimum-norm interpolant.`
+        : `<b class="ok">Both curves pass through all 8 points</b> (training error ≈ 0), yet the random start ends with a larger norm (${fmt(nRand, 1)} vs ${fmt(nMin, 1)}) and ${testErr(S.thRand) > testErr(S.thMin) ? 'a worse' : 'a different'} test error. The penalty is zero; the choice comes from the optimizer's starting point.`;
+      hooks.impl = { nMin, nRand, d: S.dd, s: s(), tMin: testErr(S.thMin), tRand: testErr(S.thRand) };
+      hooks.implUpdate && hooks.implUpdate();
+    }
+    $('#i-new').addEventListener('click', () => { initSeed++; pre.clear(); draw(); });
+    const pre = Lab.presets('i-presets', 'i-exp', {
+      small: { text: 'A small random start. The two interpolants are similar; the black (minimum-norm) curve is the smoothest function through the points that this feature set can express.' },
+      large: { text: 'A large random start keeps its large null-space component forever: gradient descent fixes the training error but never removes the random wiggles between the points.' },
+      few: { text: 'With \\(d=9\\) features for \\(n=8\\) points there is barely one interpolant, and it needs huge coefficients: the curve swings wildly between the points whatever the start. More parameters give gradient descent room to find a small-norm, smoother fit.' }
+    }, key => { const c = { small: [80, 0.25], large: [80, 1.2], few: [9, 0.6] }[key]; d.set(c[0]); s.set(c[1]); initSeed = 1; draw(); });
+    pre.select('large');
+  })();
+
+  /* =====================================================================
+     5. Cross validation
+     ===================================================================== */
+  (function crossval() {
+    const root = $('#m-cv'), K = 10, n = 30;
+    const gt = x => 2.5 * x * x * x - 1.2 * x + 0.3;
+    let dseed = 5, sseed = 1, X, Y;
+    const rt = Lab.rng(77), Xte = Array.from({ length: 500 }, () => 2 * rt() - 1), Yte = Xte.map(x => gt(x) + 0.25 * rt.normal());
+    function load() { const r = Lab.rng(dseed); X = Array.from({ length: n }, () => 2 * r() - 1); Y = X.map(x => gt(x) + 0.25 * r.normal()); }
+    const method = Lab.seg('v-method', () => { showFor(root, [method()]); pre.clear(); draw(); });
+    const k = Lab.range('v-k', { on: () => { pre.clear(); draw(); } });
+    const frac = Lab.range('v-frac', { show: v => Math.round(v * 100) + ' %', on: () => { pre.clear(); draw(); } });
+    const fit = (idx, deg) => ridge(idx.map(i => polyRow(X[i], deg)), idx.map(i => Y[i]), 1e-9);
+    const predict = (th, x) => th.reduce((s, t, j) => s + t * Math.pow(x, j), 0);
+    const errOn = (th, idx) => idx.reduce((s, i) => s + (predict(th, X[i]) - Y[i]) ** 2, 0) / idx.length;
+    function perm() { const r = Lab.rng(sseed), p = [...Array(n).keys()]; for (let i = n - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; } return p; }
+    function curves() {
+      const all = [...Array(n).keys()], p = perm();
+      return Array.from({ length: K + 1 }, (_, deg) => {
+        const th = fit(all, deg);
+        const train = errOn(th, all);
+        const test = Xte.reduce((s, x, i) => s + (predict(th, x) - Yte[i]) ** 2, 0) / Xte.length;
+        let sel;
+        if (method() === 'train') sel = train;
+        else if (method() === 'hold') { const h = Math.round(frac() * n), cv = p.slice(0, h), tr = p.slice(h); sel = deg + 1 > tr.length ? Infinity : errOn(fit(tr, deg), cv); }
+        else { const kk = k(); let s = 0; for (let j = 0; j < kk; j++) { const val = p.filter((_, i) => i % kk === j), tr = p.filter((_, i) => i % kk !== j); s += errOn(fit(tr, deg), val); } sel = s / kk; }
+        return { deg, train, test, sel };
+      });
+    }
+    let C;
+    const pick = () => C.reduce((b, c) => (c.sel < b.sel ? c : b));
+    const fp = new Plot('v-fit', { xmin: -1.05, xmax: 1.05, ymin: -1.5, ymax: 2, pad: { l: 40, b: 34, t: 14, r: 14 } });
+    fp.draw = (p) => {
+      const th = fit([...Array(n).keys()], pick().deg);
+      p.axes({ xlabel: 'x', ylabel: 'y' });
+      p.curve(gt, { color: css('--muted'), width: 1.5, dash: [6, 4] });
+      p.curve(x => predict(th, x), { color: css('--fg'), width: 2.6 });
+      X.forEach((x, i) => p.marker(x, Y[i], 1, { r: 4.5 }));
+      p.label(`selected degree ${pick().deg}`, p.v.xmin, p.v.ymax, { dx: 8, dy: 12, font: `600 14px ${css('--font-body')}`, color: css('--fg') });
+    };
+    const ep = new Plot('v-err', { xmin: -0.3, xmax: 10.3, ymin: -2, ymax: 0, pad: { l: 50, b: 36, t: 30, r: 14 } });
+    ep.draw = (p, ctx) => {
+      const L = v => Math.log10(Math.max(v, 1e-4));
+      const ys = C.flatMap(c => [c.train, c.test, c.sel]).filter(isFinite).map(L);
+      p.o.ymin = Math.min(...ys) - 0.1; p.o.ymax = Math.min(1.5, Math.max(...ys)) + 0.1; p.layout();
+      p.axes({ xlabel: 'degree k', xfmt: t => t.toFixed(0), yfmt: t => '10^' + t.toFixed(1) });
+      [['train', css('--pos'), 2, []], ['test', css('--neg'), 2, [6, 4]], ['sel', css('--primary'), 3, []]].forEach(([key, col, w, dash]) => {
+        if (key === 'sel' && method() === 'train') return;
+        ctx.strokeStyle = col; ctx.lineWidth = w; ctx.setLineDash(dash); ctx.beginPath();
+        let pen = false;
+        C.forEach(c => { const v = c[key]; if (!isFinite(v)) { pen = false; return; } const X0 = p.X(c.deg), Y0 = p.Y(Math.min(L(v), p.v.ymax)); pen ? ctx.lineTo(X0, Y0) : ctx.moveTo(X0, Y0); pen = true; }); ctx.stroke(); ctx.setLineDash([]);
+      });
+      const b = pick();
+      p.dot(b.deg, Math.min(L(b.sel), p.v.ymax), { r: 7, color: method() === 'train' ? css('--pos') : css('--primary') });
+    };
+    function draw() {
+      showFor(root, [method()]);
+      C = curves(); fp.render(); ep.render();
+      const b = pick(), best = C.reduce((a, c) => (c.test < a.test ? c : a));
+      const fits = method() === 'train' ? 11 : method() === 'hold' ? 11 : 11 * k();
+      $('#v-read').innerHTML = `
+        <div><dt>selected degree</dt><dd>${b.deg}</dd></div>
+        <div><dt>its test MSE</dt><dd>${fmt(b.test, 4)}</dd></div>
+        <div><dt>best possible (test)</dt><dd>degree ${best.deg}, ${fmt(best.test, 4)}</dd></div>
+        <div><dt>model fits for selection</dt><dd>${fits}</dd></div>`;
+      const st = $('#v-status');
+      if (method() === 'train') st.innerHTML = `<b class="bad">Training error always prefers degree 10.</b> The models are nested, so a higher degree never fits the training data worse. The selected model's test error is ${fmt(b.test, 3)}, versus ${fmt(best.test, 3)} for the best degree.`;
+      else st.innerHTML = `<b class="ok">${method() === 'hold' ? 'Hold-out' : k() === n ? 'Leave-one-out' : k() + '-fold cross validation'} selects degree ${b.deg}.</b> ${Math.abs(b.test - best.test) < 0.01 ? 'Its test error is within 0.01 of the best degree.' : 'Reshuffle the split: the choice can change, especially with hold-out.'} The test set was not used to choose.`;
+      hooks.cv = { train: C.map(c => c.train), pickTrain: C.reduce((a, c) => (c.train < a.train ? c : a)).deg, testAtPick: b.test, bestTest: best.test, method: method(), deg: b.deg };
+      hooks.cvUpdate && hooks.cvUpdate();
+    }
+    $('#v-shuffle').addEventListener('click', () => { sseed++; pre.clear(); draw(); });
+    $('#v-new').addEventListener('click', () => { dseed++; load(); pre.clear(); draw(); });
+    const pre = Lab.presets('v-presets', 'v-exp', {
+      train: { text: 'Selecting by training error. The blue curve only goes down, so the highest degree wins. The dashed test error shows that this choice is poor.' },
+      hold: { text: 'Hold out 30 % of the data, fit on 70 %, compare on the held-out part. Press <b>Reshuffle the split</b> a few times: with only 9 held-out points, the selection is noisy.' },
+      k10: { text: '10-fold: every point is held out exactly once. The green curve follows the shape of the test curve much more closely than training error does, and the selected degree is stable under reshuffling.' },
+      loo: { text: 'Leave-one-out (k = n = 30): each fit uses 29 points. The estimate is nearly unbiased, but it costs 30 fits per degree.' }
+    }, key => {
+      if (key === 'train') method.set('train');
+      if (key === 'hold') { method.set('hold'); frac.set(0.3); }
+      if (key === 'k10') { method.set('kfold'); k.set(10); }
+      if (key === 'loo') { method.set('kfold'); k.set(30); }
+      sseed = 1; draw();
+    });
+    load();
+    pre.select('k10');
+  })();
+
+  /* =====================================================================
+     6. Bayesian linear regression
+     ===================================================================== */
+  (function bayes() {
+    const r = Lab.rng(21), N = 20, xsAll = Array.from({ length: N }, (_, i) => (i === 0 ? -0.8 : i === 1 ? 0.75 : 2 * r() - 1)), noise = Array.from({ length: N }, () => r.normal());
+    const t0 = 0.6, t1 = -1.3;
+    const nS = Lab.range('b-n', { on: () => { pre.clear(); draw(); } });
+    const tau = Lab.range('b-tau', { map: v => Math.pow(10, v), show: v => v.toFixed(2), on: () => { pre.clear(); draw(); } });
+    const sig = Lab.range('b-sig', { show: v => v.toFixed(2), on: () => { pre.clear(); draw(); } });
+    const data = () => xsAll.slice(0, nS()).map((x, i) => [x, t0 + t1 * x + sig() * noise[i]]);
+    function post() {
+      const D = data(), s2 = sig() ** 2, t2 = tau() ** 2;
+      const P = [[1 / t2, 0], [0, 1 / t2]], b = [0, 0];
+      D.forEach(([x, y]) => { const ph = [1, x]; for (let i = 0; i < 2; i++) { b[i] += ph[i] * y / s2; for (let j = 0; j < 2; j++) P[i][j] += ph[i] * ph[j] / s2; } });
+      const det = P[0][0] * P[1][1] - P[0][1] * P[1][0];
+      const S = [[P[1][1] / det, -P[0][1] / det], [-P[1][0] / det, P[0][0] / det]];
+      const mu = matvec(S, b);
+      let mle = null;
+      if (D.length >= 2) { const A = [[0, 0], [0, 0]], c = [0, 0]; D.forEach(([x, y]) => { const ph = [1, x]; for (let i = 0; i < 2; i++) { c[i] += ph[i] * y; for (let j = 0; j < 2; j++) A[i][j] += ph[i] * ph[j]; } }); mle = Lab.solve(A, c); }
+      return { D, S, P, mu, mle, lam: s2 / t2 };
+    }
+    let B;
+    const pp = new Plot('b-par', { xmin: -3, xmax: 3, ymin: -3, ymax: 3, equal: true, pad: { l: 40, b: 34, t: 30, r: 12 } });
+    pp.draw = (p, ctx) => {
+      const { P, mu } = B;
+      const logd = (a, b) => { const d = [a - mu[0], b - mu[1]]; return -0.5 * (P[0][0] * d[0] * d[0] + 2 * P[0][1] * d[0] * d[1] + P[1][1] * d[1] * d[1]); };
+      p.heat(logd, Lab.seqColor(-6, 0, 0.85), 4);
+      p.axes({ xlabel: 'θ₀ (intercept)', ylabel: 'θ₁ (slope)' });
+      [1, 2].forEach(k => { ctx.save(); ctx.strokeStyle = css('--muted'); ctx.setLineDash([6, 4]); ctx.lineWidth = 1.3; ctx.beginPath(); ctx.arc(p.X(0), p.Y(0), k * tau() * p.sx, 0, 2 * Math.PI); ctx.stroke(); ctx.restore(); });
+      ctx.save(); ctx.strokeStyle = css('--fg'); ctx.lineWidth = 1.5; const X = p.X(t0), Y = p.Y(t1); ctx.beginPath(); ctx.moveTo(X - 7, Y); ctx.lineTo(X + 7, Y); ctx.moveTo(X, Y - 7); ctx.lineTo(X, Y + 7); ctx.stroke(); ctx.restore();
+      p.label('true θ', t0, t1, { dx: 9, dy: 12, font: `12px ${css('--font-body')}`, color: css('--muted') });
+      if (B.mle) { p.dot(B.mle[0], B.mle[1], { r: 6, color: css('--neg') }); p.label('MLE', B.mle[0], B.mle[1], { dx: 9, dy: -10, font: `600 12.5px ${css('--font-body')}`, color: css('--neg') }); }
+      p.dot(mu[0], mu[1], { r: 6.5, color: css('--fg') });
+      p.label('MAP', mu[0], mu[1], { dx: -9, dy: -10, align: 'right', font: `600 12.5px ${css('--font-body')}`, color: css('--fg') });
+    };
+    const dp = new Plot('b-dat', { xmin: -1.1, xmax: 1.1, ymin: -3, ymax: 3, pad: { l: 40, b: 34, t: 30, r: 12 } });
+    dp.draw = (p, ctx) => {
+      const { S, mu, D } = B;
+      p.axes({ xlabel: 'x', ylabel: 'y' });
+      // predictive band: mean ± 2 sqrt(φᵀΣφ + σ²)
+      const band = x => { const v = S[0][0] + 2 * S[0][1] * x + S[1][1] * x * x + sig() ** 2; return 2 * Math.sqrt(v); };
+      const xsG = Array.from({ length: 101 }, (_, i) => -1.1 + 2.2 * i / 100);
+      ctx.fillStyle = css('--primary-soft'); ctx.beginPath();
+      xsG.forEach((x, i) => { const y = mu[0] + mu[1] * x + band(x); i ? ctx.lineTo(p.X(x), p.Y(y)) : ctx.moveTo(p.X(x), p.Y(y)); });
+      xsG.slice().reverse().forEach(x => ctx.lineTo(p.X(x), p.Y(mu[0] + mu[1] * x - band(x))));
+      ctx.closePath(); p.clip(() => ctx.fill());
+      // posterior samples via Cholesky of S
+      const L00 = Math.sqrt(S[0][0]), L10 = S[1][0] / L00, L11 = Math.sqrt(Math.max(S[1][1] - L10 * L10, 0));
+      const rs = Lab.rng(5);
+      for (let k = 0; k < 18; k++) { const e0 = rs.normal(), e1 = rs.normal(), a = mu[0] + L00 * e0, b = mu[1] + L10 * e0 + L11 * e1; ctx.globalAlpha = 0.35; p.line(b, -1, a, { color: css('--primary'), width: 1.2 }); }
+      ctx.globalAlpha = 1;
+      if (B.mle) p.line(B.mle[1], -1, B.mle[0], { color: css('--neg'), width: 2, dash: [6, 4] });
+      p.line(mu[1], -1, mu[0], { color: css('--fg'), width: 2.6 });
+      D.forEach(([x, y]) => p.marker(x, y, 1, { r: 5.5 }));
+    };
+    function draw() {
+      B = post(); pp.render(); dp.render();
+      const { mu, mle, lam } = B;
+      $('#b-read').innerHTML = `
+        <div><dt>MAP θ</dt><dd>(${fmt(mu[0], 3)}, ${fmt(mu[1], 3)})</dd></div>
+        <div><dt>MLE θ</dt><dd>${mle ? `(${fmt(mle[0], 3)}, ${fmt(mle[1], 3)})` : 'needs n ≥ 2'}</dd></div>
+        <div><dt>ridge λ = σ²/τ²</dt><dd>${fmt(lam, 3)}</dd></div>
+        <div><dt>posterior sd of slope</dt><dd>${fmt(Math.sqrt(B.S[1][1]), 3)}</dd></div>`;
+      const st = $('#b-status');
+      st.innerHTML = nS() === 0 ? `<b>No data yet.</b> The posterior equals the prior, centred at 0; the MAP estimate is θ = 0 and the predictive band is wide everywhere.`
+        : `<b class="ok">MAP = ridge with λ = ${fmt(lam, 2)}.</b> ${mle ? `The MAP point is pulled from the MLE towards 0 by ${fmt(Math.hypot(mle[0] - mu[0], mle[1] - mu[1]), 3)}.` : 'With one point the MLE is not unique, but the prior makes the MAP estimate unique.'} ${nS() >= 15 ? 'With many points the likelihood dominates and MAP ≈ MLE.' : 'Add points: the posterior narrows and the prior matters less.'}`;
+      hooks.bayes = { mu, mle, lam, n: nS(), tau: tau(), sig: sig() };
+      hooks.bayesUpdate && hooks.bayesUpdate();
+    }
+    const pre = Lab.presets('b-presets', 'b-exp', {
+      two: { text: 'Two points determine a line exactly, so the MLE passes through both. The prior pulls the MAP line towards the flat line y = 0, and the posterior is still broad: many lines remain plausible.' },
+      many: { text: 'With 20 points the posterior is a small ellipse around the true θ, and MAP and MLE nearly coincide. The data overwhelm the prior.' },
+      tight: { text: 'A strong prior (τ = 0.15) expresses the belief that θ is near 0. Even with 8 points the MAP line is visibly flattened: λ = σ²/τ² is large.' }
+    }, key => { const c = { two: [2, 0, 0.5], many: [20, 0, 0.5], tight: [8, Math.log10(0.15), 0.5] }[key]; nS.set(c[0]); tau.set(c[1]); sig.set(c[2]); draw(); });
+    pre.select('two');
+  })();
+
+  /* =====================================================================
+     Questions
+     ===================================================================== */
+  (function questions() {
+    const eta = Lab.range('q1-eta', { show: v => v.toFixed(2), on: q1 }), lam = Lab.range('q1-lam', { show: v => v.toFixed(2), on: q1 });
+    function q1() {
+      const f = 1 - eta() * lam();
+      $('#q1-out').innerHTML = `shrink factor 1 − ηλ = <b>${fmt(f, 4)}</b><br>without a data gradient, after 10 steps: θ × ${fmt(Math.pow(f, 10), 4)}, after 100: θ × ${fmt(Math.pow(f, 100), 4)}${f < 0 ? '<br><b style="color:var(--bad)">ηλ &gt; 1: the factor is negative and weights flip sign every step.</b>' : ''}`;
+    }
+    q1();
+    const a2 = Lab.range('q2-a', { show: v => fmt(v, 2), on: q2 }), l2 = Lab.range('q2-l', { show: v => fmt(v, 2), on: q2 });
+    const soft = (a, l) => Math.sign(a) * Math.max(Math.abs(a) - l, 0);
+    const qp = new Plot('q2-plot', { xmin: -3, xmax: 3, ymin: -3, ymax: 3, pad: { l: 32, b: 28, t: 12, r: 12 } });
+    qp.draw = (p) => {
+      p.axes({ xlabel: 'a' });
+      p.curve(a => a, { color: css('--faint'), width: 1, dash: [3, 3] });
+      p.curve(a => a / (1 + l2()), { color: css('--pos'), width: 2.2 });
+      p.curve(a => soft(a, l2()), { color: css('--neg'), width: 2.6 });
+      p.dot(a2(), soft(a2(), l2()), { r: 5, color: css('--neg') });
+      p.dot(a2(), a2() / (1 + l2()), { r: 5, color: css('--pos') });
+    };
+    function q2() {
+      qp.render();
+      $('#q2-out').innerHTML = `lasso (orange): θ* = sign(a)·max(|a| − λ, 0) = <b>${fmt(soft(a2(), l2()), 3)}</b><br>ridge (blue): θ* = a/(1 + λ) = <b>${fmt(a2() / (1 + l2()), 3)}</b>`;
+    }
+    q2();
+    hooks.cvUpdate = () => { const c = hooks.cv; if (!c) return; $('#q3-out').innerHTML = `training MSE by degree 0…10:<br>${c.train.map(v => fmt(v, 3)).join(', ')}<br>smallest at degree <b>${c.pickTrain}</b> (non-increasing, as the nested argument predicts)`; };
+    hooks.cvUpdate();
+    const n4 = Lab.range('q4-n', { on: q4 }), m4 = Lab.range('q4-m', { on: q4 }), k4 = Lab.range('q4-k', { on: q4 });
+    function q4() {
+      const n = n4(), m = m4(), k = k4();
+      $('#q4-out').innerHTML = `hold-out (70/30): <b>${m}</b> fits on ${Math.round(0.7 * n)} examples<br>${k}-fold: <b>${(k * m).toLocaleString('en-US')}</b> fits on ${Math.round(n * (1 - 1 / k))} examples<br>leave-one-out: <b>${(n * m).toLocaleString('en-US')}</b> fits on ${n - 1} examples<br>(plus one final refit of the selected model)`;
+    }
+    q4();
+    hooks.bayesUpdate = () => { const b = hooks.bayes; if (!b) return; $('#q5-out').innerHTML = `σ = ${fmt(b.sig, 2)}, τ = ${fmt(b.tau, 2)} ⇒ λ = σ²/τ² = <b>${fmt(b.lam, 3)}</b><br>MAP θ = (${fmt(b.mu[0], 3)}, ${fmt(b.mu[1], 3)}) with n = ${b.n}<br>${b.mle ? `MLE θ = (${fmt(b.mle[0], 3)}, ${fmt(b.mle[1], 3)}), i.e. ridge with λ = 0` : 'MLE needs n ≥ 2'}`; };
+    hooks.bayesUpdate();
+    hooks.implUpdate = () => { const i = hooks.impl; if (!i) return; $('#q6-out').innerHTML = `d = ${i.d}, n = 8, init scale s = ${fmt(i.s, 2)}<br>‖θ‖ from θ₀ = 0: <b>${fmt(i.nMin, 3)}</b> (minimum norm)<br>‖θ‖ from random θ₀: <b>${fmt(i.nRand, 3)}</b><br>test MSE: ${fmt(i.tMin, 3)} vs ${fmt(i.tRand, 3)}`; };
+    hooks.implUpdate();
+  })();
+})();
+</script>
